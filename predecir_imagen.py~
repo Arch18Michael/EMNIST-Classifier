@@ -1,0 +1,161 @@
+import argparse
+import os
+
+import numpy as np
+import tensorflow as tf
+from PIL import Image
+import matplotlib.pyplot as plt
+
+
+MODEL_PATH = "modelos/emnist_model.keras"
+
+
+def cargar_modelo():
+    print("Cargando modelo...")
+    model = tf.keras.models.load_model(MODEL_PATH)
+    print("Modelo cargado correctamente.")
+    return model
+
+
+def preprocesar_imagen(ruta):
+    print(f"\nCargando imagen: {ruta}")
+
+    if not os.path.exists(ruta):
+        raise FileNotFoundError(
+            f"No existe la imagen: {ruta}"
+        )
+
+    # Abrir imagen
+    imagen = Image.open(ruta)
+
+    # Convertir a escala de grises
+    imagen = imagen.convert("L")
+
+    # Redimensionar a 28x28
+    imagen = imagen.resize(
+        (28, 28),
+        Image.Resampling.LANCZOS
+    )
+
+    # Convertir a NumPy
+    imagen_array = np.array(imagen).astype("float32")
+
+    # Normalizar 0-255 -> 0-1
+    imagen_array = imagen_array / 255.0
+
+    # EMNIST normalmente utiliza fondo negro y carácter blanco.
+    # Si la imagen tiene fondo blanco, la invertimos.
+    if np.mean(imagen_array) > 0.5:
+        imagen_array = 1.0 - imagen_array
+
+    # Añadir dimensión de canal
+    imagen_array = np.expand_dims(
+        imagen_array,
+        axis=-1
+    )
+
+    # Añadir dimensión del batch
+    imagen_array = np.expand_dims(
+        imagen_array,
+        axis=0
+    )
+
+    return imagen_array
+
+
+def predecir(model, imagen):
+    predicciones = model.predict(
+        imagen,
+        verbose=0
+    )
+
+    clase = int(
+        np.argmax(predicciones[0])
+    )
+
+    probabilidad = float(
+        np.max(predicciones[0])
+    )
+
+    return clase, probabilidad, predicciones[0]
+
+
+def mostrar_resultado(
+    imagen_procesada,
+    clase,
+    probabilidad
+):
+
+    imagen = imagen_procesada[0, :, :, 0]
+
+    plt.figure(figsize=(5, 5))
+
+    plt.imshow(
+        imagen,
+        cmap="gray"
+    )
+
+    plt.title(
+        f"Predicción: Clase {clase}\n"
+        f"Confianza: {probabilidad * 100:.2f}%"
+    )
+
+    plt.axis("off")
+
+    plt.tight_layout()
+
+    plt.show()
+
+
+def main():
+
+    parser = argparse.ArgumentParser(
+        description="Predicción de imágenes EMNIST"
+    )
+
+    parser.add_argument(
+        "--image",
+        required=True,
+        help="Ruta de la imagen JPG o PNG"
+    )
+
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("EMNIST - PREDICCIÓN DE IMAGEN")
+    print("=" * 60)
+
+    model = cargar_modelo()
+
+    imagen = preprocesar_imagen(
+        args.image
+    )
+
+    clase, probabilidad, predicciones = predecir(
+        model,
+        imagen
+    )
+
+    print("\n" + "=" * 60)
+    print("RESULTADO")
+    print("=" * 60)
+
+    print(
+        f"Clase predicha: {clase}"
+    )
+
+    print(
+        f"Probabilidad: {probabilidad * 100:.2f}%"
+    )
+
+    print("=" * 60)
+
+    mostrar_resultado(
+        imagen,
+        clase,
+        probabilidad
+    )
+
+
+if __name__ == "__main__":
+    main()
